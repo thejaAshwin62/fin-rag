@@ -1,0 +1,17 @@
+# ============================================================
+# RAG Finance AI Chatbot — Dependencies
+# ============================================================
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# Google Gemini SDK (new unified SDK — replaces deprecated google-generativeai)
+google-genai>=1.0.0
+
+# Pinecone Vector Database SDK (v5+)
+pinecone>=5.0.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Numerical operations (embedding handling)
+numpy>=1.26.0
