@@ -32,6 +32,19 @@ fin-rag is a Python-based project designed to [briefly describe the main purpose
    pip install -r requirements.txt
    ```
 
+4. **Configure environment variables:**
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Required:
+   - `GOOGLE_API_KEY`
+
+   Optional ChromaDB settings:
+   - `CHROMA_PERSIST_DIR` (default: `./chroma_db`)
+   - `CHROMA_COLLECTION_NAME` (default: `finance-rag-chatbot`)
+
 ## Usage
 
 [Provide example code or CLI commands for how to use the project.]
@@ -46,8 +59,10 @@ print(result)
 Or, from the command line:
 
 ```bash
-python main.py --input input_data.csv
+python main.py
 ```
+
+This project now uses **ChromaDB** as the vector store for ingestion and semantic search.
 
 ## Project Structure
 

@@ -3,7 +3,7 @@
 main.py — RAG Finance AI Chatbot Entry Point
 ============================================================
 Provides a menu-driven interface to:
-1. Ingest finance data into Pinecone
+1. Ingest finance data into ChromaDB
 2. Start the interactive chatbot
 3. Run the full pipeline (ingest + chat)
 
@@ -21,7 +21,7 @@ from utils import setup_logging, print_header, print_separator, Colors
 def show_menu():
     """Display the main application menu."""
     print(f"  {Colors.WHITE}Select an option:{Colors.RESET}\n")
-    print(f"  {Colors.CYAN}[1]{Colors.RESET} 📥  Ingest Data       — Generate dataset, embed, store in Pinecone")
+    print(f"  {Colors.CYAN}[1]{Colors.RESET} 📥  Ingest Data       — Generate dataset, embed, store in ChromaDB")
     print(f"  {Colors.CYAN}[2]{Colors.RESET} 💬  Start Chatbot     — Launch interactive finance Q&A")
     print(f"  {Colors.CYAN}[3]{Colors.RESET} 🚀  Full Pipeline     — Ingest data, then start chatbot")
     print(f"  {Colors.CYAN}[4]{Colors.RESET} 🚪  Exit")
@@ -37,7 +37,7 @@ def main():
     logger.info("Application started")
 
     # Show application header
-    print_header("RAG Finance AI Chatbot", "Gemini + Pinecone | Semantic Search | Streaming")
+    print_header("RAG Finance AI Chatbot", "Gemini + ChromaDB | Semantic Search | Streaming")
 
     # Validate API keys before proceeding
     validate_env()

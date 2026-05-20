@@ -6,24 +6,22 @@ Handles the complete ingestion flow:
 1. Generate finance dataset
 2. Chunk text with overlap
 3. Generate embeddings via Gemini
-4. Create Pinecone index (if needed)
+4. Initialize Chroma collection
 5. Upsert vectors with metadata
 ============================================================
 """
 
 import os
-import time
 import logging
 
+import chromadb
 from google import genai
 from google.genai import types
-from pinecone import Pinecone, ServerlessSpec
 
 from config import (
-    GOOGLE_API_KEY, PINECONE_API_KEY,
+    GOOGLE_API_KEY,
     EMBEDDING_MODEL, EMBEDDING_DIMENSION,
-    PINECONE_INDEX_NAME, PINECONE_CLOUD, PINECONE_REGION,
-    PINECONE_METRIC, PINECONE_NAMESPACE,
+    CHROMA_COLLECTION_NAME, CHROMA_PERSIST_DIR,
     CHUNK_SIZE, CHUNK_OVERLAP,
     UPSERT_BATCH_SIZE, EMBEDDING_BATCH_SIZE,
     DATA_DIR, DATASET_FILE,
@@ -277,97 +275,84 @@ def generate_embeddings(chunks: list[dict]) -> list[dict]:
 
 
 # ════════════════════════════════════════════════════════════
-# SECTION 4: Pinecone Index Management
+# SECTION 4: Chroma Collection Management
 # ════════════════════════════════════════════════════════════
 
-def init_pinecone_index() -> object:
+def init_chroma_collection() -> object:
     """
-    Initialize Pinecone client and create the index if it doesn't exist.
+    Initialize ChromaDB client and get/create the collection.
     
     Returns:
-        Pinecone Index object ready for upsert/query operations.
+        Chroma collection object ready for upsert/query operations.
     """
-    logger.info("Initializing Pinecone (index=%s)...", PINECONE_INDEX_NAME)
-    print_info(f"Connecting to Pinecone (index: {PINECONE_INDEX_NAME})...")
+    logger.info("Initializing ChromaDB (collection=%s, persist_dir=%s)...",
+                CHROMA_COLLECTION_NAME, CHROMA_PERSIST_DIR)
+    print_info(
+        f"Connecting to ChromaDB (collection: {CHROMA_COLLECTION_NAME}, "
+        f"persist_dir: {CHROMA_PERSIST_DIR})..."
+    )
 
-    pc = Pinecone(api_key=PINECONE_API_KEY)
+    os.makedirs(CHROMA_PERSIST_DIR, exist_ok=True)
+    client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+    collection = client.get_or_create_collection(
+        name=CHROMA_COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"},
+    )
 
-    # Check if index already exists
-    existing_indexes = [idx.name for idx in pc.list_indexes()]
-
-    if PINECONE_INDEX_NAME not in existing_indexes:
-        print_info(f"Creating new index '{PINECONE_INDEX_NAME}' ({PINECONE_CLOUD}/{PINECONE_REGION})...")
-        logger.info("Creating Pinecone index: %s", PINECONE_INDEX_NAME)
-
-        pc.create_index(
-            name=PINECONE_INDEX_NAME,
-            dimension=EMBEDDING_DIMENSION,
-            metric=PINECONE_METRIC,
-            spec=ServerlessSpec(
-                cloud=PINECONE_CLOUD,
-                region=PINECONE_REGION,
-            ),
-        )
-
-        # Wait for index to be ready
-        print_info("Waiting for index to be ready...")
-        while not pc.describe_index(PINECONE_INDEX_NAME).status.get("ready", False):
-            time.sleep(2)
-
-        print_success(f"Index '{PINECONE_INDEX_NAME}' created and ready!")
-        logger.info("Pinecone index created successfully")
-    else:
-        print_success(f"Index '{PINECONE_INDEX_NAME}' already exists")
-        logger.info("Pinecone index already exists")
-
-    # Return index handle
-    index = pc.Index(PINECONE_INDEX_NAME)
-    return index
+    print_success(f"Collection '{CHROMA_COLLECTION_NAME}' ready")
+    logger.info("ChromaDB collection ready")
+    return collection
 
 
 # ════════════════════════════════════════════════════════════
-# SECTION 5: Vector Upsert to Pinecone
+# SECTION 5: Vector Upsert to ChromaDB
 # ════════════════════════════════════════════════════════════
 
-def upsert_to_pinecone(index, chunks: list[dict]):
+def upsert_to_chroma(collection, chunks: list[dict]):
     """
-    Upsert embedding vectors with metadata into Pinecone.
+    Upsert embedding vectors with metadata into ChromaDB.
     Uses MD5 hash of text as vector ID to prevent duplicates.
     
     Args:
-        index: Pinecone Index object.
+        collection: Chroma collection object.
         chunks: List of chunk dicts (must have 'text', 'embedding', 'topic', 'chunk_index').
     """
-    logger.info("Upserting %d vectors to Pinecone...", len(chunks))
-    print_info(f"Upserting {len(chunks)} vectors to Pinecone...")
+    logger.info("Upserting %d vectors to ChromaDB...", len(chunks))
+    print_info(f"Upserting {len(chunks)} vectors to ChromaDB...")
 
     total_upserted = 0
 
     for i in range(0, len(chunks), UPSERT_BATCH_SIZE):
         batch = chunks[i : i + UPSERT_BATCH_SIZE]
 
-        vectors = []
+        ids = []
+        embeddings = []
+        documents = []
+        metadatas = []
         for chunk in batch:
             # Use MD5 hash as vector ID — prevents duplicates on re-ingestion
             vec_id = hash_text(chunk["text"])
 
-            vectors.append({
-                "id": vec_id,
-                "values": chunk["embedding"],
-                "metadata": {
-                    "text": chunk["text"],
-                    "topic": chunk["topic"],
-                    "chunk_index": chunk["chunk_index"],
-                    "source": chunk["source"],
-                },
+            ids.append(vec_id)
+            embeddings.append(chunk["embedding"])
+            documents.append(chunk["text"])
+            metadatas.append({
+                "topic": chunk["topic"],
+                "chunk_index": chunk["chunk_index"],
+                "source": chunk["source"],
             })
 
-        index.upsert(vectors=vectors, namespace=PINECONE_NAMESPACE)
-        total_upserted += len(vectors)
+        collection.upsert(
+            ids=ids,
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=metadatas,
+        )
+        total_upserted += len(ids)
         print(f"    {Colors.DIM}Upserted {total_upserted}/{len(chunks)} vectors...{Colors.RESET}")
 
     logger.info("Successfully upserted %d vectors", total_upserted)
-    print_success(f"All {total_upserted} vectors stored in Pinecone!")
+    print_success(f"All {total_upserted} vectors stored in ChromaDB!")
 
 
 # ════════════════════════════════════════════════════════════
@@ -380,7 +365,7 @@ def run_ingestion():
     1. Generate finance dataset
     2. Chunk text
     3. Generate embeddings
-    4. Create/connect Pinecone index
+    4. Create/connect Chroma collection
     5. Upsert vectors
     """
     print_separator("═", 60, Colors.MAGENTA)
@@ -404,20 +389,20 @@ def run_ingestion():
         chunks = generate_embeddings(chunks)
         print()
 
-        # Step 4: Initialize Pinecone
-        print_step(4, "Initializing Pinecone index...")
-        index = init_pinecone_index()
+        # Step 4: Initialize ChromaDB
+        print_step(4, "Initializing ChromaDB collection...")
+        collection = init_chroma_collection()
         print()
 
         # Step 5: Upsert vectors
-        print_step(5, "Upserting vectors to Pinecone...")
-        upsert_to_pinecone(index, chunks)
+        print_step(5, "Upserting vectors to ChromaDB...")
+        upsert_to_chroma(collection, chunks)
         print()
 
         print_separator("═", 60, Colors.GREEN)
         print(f"  {Colors.BOLD}{Colors.GREEN}✅ INGESTION COMPLETE!{Colors.RESET}")
         print(f"  {Colors.DIM}Chunks: {len(chunks)} | Dimension: {EMBEDDING_DIMENSION} | "
-              f"Index: {PINECONE_INDEX_NAME}{Colors.RESET}")
+              f"Collection: {CHROMA_COLLECTION_NAME}{Colors.RESET}")
         print_separator("═", 60, Colors.GREEN)
         print()
 
