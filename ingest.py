@@ -337,7 +337,6 @@ def upsert_to_chroma(collection, chunks: list[dict]):
             embeddings.append(chunk["embedding"])
             documents.append(chunk["text"])
             metadatas.append({
-                "text": chunk["text"],
                 "topic": chunk["topic"],
                 "chunk_index": chunk["chunk_index"],
                 "source": chunk["source"],
