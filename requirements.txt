@@ -7,8 +7,8 @@
 # Google Gemini SDK (new unified SDK — replaces deprecated google-generativeai)
 google-genai>=1.0.0
 
-# Pinecone Vector Database SDK (v5+)
-pinecone>=5.0.0
+# ChromaDB Vector Database
+chromadb>=0.5.5
 
 # Environment variable management
 python-dotenv>=1.0.0

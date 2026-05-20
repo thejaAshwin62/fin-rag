@@ -17,7 +17,6 @@ load_dotenv()
 
 # ── API Keys ───────────────────────────────────────────────
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY", "")
 
 # ── Model Configuration ───────────────────────────────────
 # LLM model for response generation (streaming supported)
@@ -30,12 +29,12 @@ EMBEDDING_MODEL = "gemini-embedding-2"
 # Using 768 for storage efficiency with minimal quality loss (MRL support)
 EMBEDDING_DIMENSION = 768
 
-# ── Pinecone Configuration ────────────────────────────────
-PINECONE_INDEX_NAME = "finance-rag-chatbot"
-PINECONE_CLOUD = "aws"
-PINECONE_REGION = "us-east-1"
-PINECONE_METRIC = "cosine"       # Similarity metric: cosine, euclidean, dotproduct
-PINECONE_NAMESPACE = "finance"   # Namespace to isolate finance data
+# ── ChromaDB Configuration ────────────────────────────────
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "finance-rag-chatbot")
+CHROMA_PERSIST_DIR = os.getenv(
+    "CHROMA_PERSIST_DIR",
+    os.path.join(os.path.dirname(__file__), "chroma_db"),
+)
 
 # ── Chunking Configuration ────────────────────────────────
 # Characters per chunk — 500 is a good balance for finance text
@@ -45,7 +44,7 @@ CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
 # ── Retrieval Configuration ───────────────────────────────
-# Number of top results to retrieve from Pinecone
+# Number of top results to retrieve from vector store
 DEFAULT_TOP_K = 5
 
 # ── Conversation Memory ──────────────────────────────────
@@ -53,7 +52,7 @@ DEFAULT_TOP_K = 5
 MAX_MEMORY_TURNS = 10
 
 # ── Batch Sizes ───────────────────────────────────────────
-# Max vectors per Pinecone upsert call
+# Max vectors per vector store upsert call
 UPSERT_BATCH_SIZE = 100
 
 # Max texts per embedding API call
@@ -78,9 +77,6 @@ def validate_env():
     missing = []
     if not GOOGLE_API_KEY or GOOGLE_API_KEY == "YOUR_GOOGLE_API_KEY":
         missing.append("GOOGLE_API_KEY")
-    if not PINECONE_API_KEY or PINECONE_API_KEY == "YOUR_PINECONE_API_KEY":
-        missing.append("PINECONE_API_KEY")
-
     if missing:
         print("\n╔══════════════════════════════════════════════════════╗")
         print("║          ⚠️  MISSING API KEYS DETECTED              ║")

@@ -118,7 +118,7 @@ def retry_with_backoff(max_retries: int = MAX_RETRIES, base_delay: float = RETRY
 def hash_text(text: str) -> str:
     """
     Generate a deterministic MD5 hash for a text string.
-    Used as Pinecone vector IDs to prevent duplicate insertion.
+    Used as vector IDs to prevent duplicate insertion.
     
     Args:
         text: Input text to hash.

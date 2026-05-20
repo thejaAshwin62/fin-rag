@@ -3,7 +3,7 @@
 chatbot.py — Interactive Finance AI Chatbot
 ============================================================
 Handles:
-1. Semantic search against Pinecone
+1. Semantic search against ChromaDB
 2. RAG prompt construction with context + memory
 3. Streaming LLM response generation
 4. Interactive CLI with commands
@@ -13,14 +13,14 @@ Handles:
 import logging
 import time
 
+import chromadb
 from google import genai
 from google.genai import types
-from pinecone import Pinecone
 
 from config import (
-    GOOGLE_API_KEY, PINECONE_API_KEY,
+    GOOGLE_API_KEY,
     LLM_MODEL, EMBEDDING_MODEL, EMBEDDING_DIMENSION,
-    PINECONE_INDEX_NAME, PINECONE_NAMESPACE,
+    CHROMA_COLLECTION_NAME, CHROMA_PERSIST_DIR,
     DEFAULT_TOP_K, MAX_MEMORY_TURNS,
 )
 from utils import (
@@ -70,10 +70,10 @@ def _embed_query(client: genai.Client, query: str) -> list[float]:
 
 def semantic_search(query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
     """
-    Perform semantic similarity search against Pinecone.
+    Perform semantic similarity search against ChromaDB.
     
     1. Embed the query using Gemini embedding model
-    2. Query Pinecone for top-K most similar vectors
+    2. Query ChromaDB for top-K most similar vectors
     3. Return matches with scores and metadata
     
     Args:
@@ -87,29 +87,37 @@ def semantic_search(query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
 
     # Initialize clients
     gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
-    pc = Pinecone(api_key=PINECONE_API_KEY)
-    index = pc.Index(PINECONE_INDEX_NAME)
+    chroma_client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+    collection = chroma_client.get_or_create_collection(
+        name=CHROMA_COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"},
+    )
 
     # Step 1: Embed the query
     query_embedding = _embed_query(gemini_client, query)
 
-    # Step 2: Query Pinecone with cosine similarity
-    results = index.query(
-        namespace=PINECONE_NAMESPACE,
-        vector=query_embedding,
-        top_k=top_k,
-        include_metadata=True,
+    # Step 2: Query ChromaDB with cosine similarity
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        include=["metadatas", "documents", "distances"],
     )
 
     # Step 3: Extract and format matches
     matches = []
-    for match in results.matches:
+    metadatas = results.get("metadatas", [[]])[0]
+    documents = results.get("documents", [[]])[0]
+    distances = results.get("distances", [[]])[0]
+
+    for metadata, document, distance in zip(metadatas, documents, distances):
+        metadata = metadata or {}
+        similarity = max(0.0, 1 - float(distance))
         matches.append({
-            "score": match.score,
-            "text": match.metadata.get("text", ""),
-            "topic": match.metadata.get("topic", "Unknown"),
-            "chunk_index": match.metadata.get("chunk_index", -1),
-            "source": match.metadata.get("source", "unknown"),
+            "score": similarity,
+            "text": metadata.get("text") or document or "",
+            "topic": metadata.get("topic", "Unknown"),
+            "chunk_index": metadata.get("chunk_index", -1),
+            "source": metadata.get("source", "unknown"),
         })
 
     logger.info("Retrieved %d matches (top score: %.4f)",
@@ -131,7 +139,7 @@ def build_prompt(query: str, context_chunks: list[dict], conversation_history: l
     
     Args:
         query: Current user question.
-        context_chunks: Retrieved chunks from Pinecone.
+        context_chunks: Retrieved chunks from ChromaDB.
         conversation_history: List of past {role, content} dicts.
     
     Returns:
@@ -400,7 +408,7 @@ def run_chatbot():
     Launch the interactive finance chatbot CLI.
     Supports natural language queries and special commands.
     """
-    print_header("Finance AI Chatbot", "Powered by Gemini + Pinecone RAG")
+    print_header("Finance AI Chatbot", "Powered by Gemini + ChromaDB RAG")
 
     print(f"  {Colors.WHITE}Ask any finance question and get AI-powered answers{Colors.RESET}")
     print(f"  {Colors.WHITE}backed by semantic search over a curated knowledge base.{Colors.RESET}")
