@@ -111,6 +111,7 @@ def semantic_search(query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
 
     for metadata, document, distance in zip(metadatas, documents, distances):
         metadata = metadata or {}
+        # Chroma cosine distance: 0 means identical; convert to bounded similarity.
         similarity = min(1.0, max(0.0, 1 - float(distance)))
         matches.append({
             "score": similarity,
