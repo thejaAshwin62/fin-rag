@@ -111,10 +111,10 @@ def semantic_search(query: str, top_k: int = DEFAULT_TOP_K) -> list[dict]:
 
     for metadata, document, distance in zip(metadatas, documents, distances):
         metadata = metadata or {}
-        similarity = max(0.0, 1 - float(distance))
+        similarity = min(1.0, max(0.0, 1 - float(distance)))
         matches.append({
             "score": similarity,
-            "text": document or metadata.get("text", ""),
+            "text": document or "",
             "topic": metadata.get("topic", "Unknown"),
             "chunk_index": metadata.get("chunk_index", -1),
             "source": metadata.get("source", "unknown"),
